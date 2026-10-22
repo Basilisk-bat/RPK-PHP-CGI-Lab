@@ -50,25 +50,11 @@ jobs:
           $directories = @(Get-ChildItem -LiteralPath lab/windows/runs -Directory)
           if ($directories.Count -ne 1) { throw "Expected one patched event in this fresh checkout; found $($directories.Count)" }
           $run = $directories[0]
-          $receipt = Get-Content -LiteralPath (Join-Path $run.FullName 'receipt.json') -Raw | ConvertFrom-Json
-          $cases = @($receipt.testCases)
-          $expected = @(
-            'ext/session/tests/rfc1867_incomplete_class_reserved_props.phpt',
-            'ext/session/tests/rfc1867_no_user_code.phpt',
-            'ext/session/tests/rfc1867_sid_invalid.phpt'
-          )
-          if ($receipt.runId -ne $run.Name -or $receipt.runtimeVersion -ne '8.5.12' -or
-              $receipt.exitCode -ne 0 -or $receipt.selectedTestsPassed -ne $true -or
-              $receipt.selectedIdentityMatch -ne $true -or $receipt.deadlineExceeded -ne $false -or
-              $receipt.activeProcessesAfterCleanup -ne 0 -or $receipt.harnessError -or
-              $receipt.junitParseError -or $cases.Count -ne $expected.Count -or
-              @($cases | Where-Object { $_.relativePath -notin $expected -or
-                  $_.failures -ne 0 -or $_.errors -ne 0 -or $_.skips -ne 0 -or $_.warnings -ne 0 }).Count -ne 0) {
-            throw 'Fresh-host receipt failed selected identity, result or cleanup checks'
-          }
-          $report = Join-Path $run.FullName 'report.html'
-          if (-not (Test-Path -LiteralPath $report -PathType Leaf) -or
-              -not ((Get-Content -LiteralPath $report -Raw) -match 'Selected patched checks passed')) {
-            throw 'Fresh-host plain-language report is missing or did not show the selected pass'
-          }
-          Write-Host "Fresh hosted Windows run verified: $($receipt.runId), PHP $($receipt.runtimeVersion), $($cases.Count) selected passes, zero owned processes after cleanup."
+          ./lab/windows/Write-HostedPacket.ps1 -RunDirectory $run.FullName -OutputDirectory (Join-Path $PWD 'bootstrap-packet')
+      - name: Save sanitized bootstrap evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-patched-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bootstrap-packet/
+          if-no-files-found: error
+          retention-days: 14

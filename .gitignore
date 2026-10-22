@@ -9,3 +9,4 @@ lab/windows/*-console.txt
 .DS_Store
 cloud/build-context/
 cloud-results/
+bootstrap-packet/

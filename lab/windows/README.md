@@ -12,6 +12,12 @@ The PHP Windows builds may need Microsoft's [latest supported x64 Visual C++ Red
 
 If a run stops after creating `runs/<event-id>/`, keep that directory as evidence. The launcher gives the next attempt a fresh ID. Advanced users should inspect the partial request, stdout and stderr and choose a new ID after correcting the cause. Reusing a completed ID returns a historical receipt with exit 2 and never starts PHP again. A fresh ID remains eligible. The local HTML report distinguishes a verified selected pass, a verified older-reference difference, and an unverified run; raw PHP test exit 1 alone does not distinguish them.
 
+## Hosted Windows bootstrap check
+
+The pull request workflow also runs the patched guided path on a fresh GitHub hosted `windows-2022` runner. It verifies the pinned downloads, selected receipt and process cleanup, then must upload a bounded packet with a path-sanitized JUnit file, the HTML report, hashes and runner identity for a green job. It excludes downloaded binaries and the raw local receipt. Read the saved artifact and its manifest alongside the exact workflow run and commit before citing the check.
+
+GitHub's [Windows 2022 image inventory](https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md) lists a preinstalled Visual C++ 2022 x64 runtime. This check therefore does not prove setup on a bare Windows machine missing that prerequisite. It calls the noninteractive patched mode; a person still needs to check the double-click menu, download consent and browser report opening.
+
 ## Manual setup for advanced users
 
 Install Python 3 and the Visual C++ runtime required by the official VS17 x64 PHP builds. From this directory, create `../php-patched-validation/`. Download these exact archives from the official PHP Windows archive into it:
