@@ -1,0 +1,46 @@
+{
+  "schema": "rpk.php.cgi-regression-source.v1",
+  "repository": "php/php-src",
+  "ref": "136e049ac10b032c83018e65b63b6df858943750",
+  "retrievedAtUtc": "2026-10-21T23:58:00Z",
+  "retrievalTimePrecision": "Approximate minute; exact file identity is pinned by Git blob hash.",
+  "files": [
+    {
+      "path": "ext/session/tests/rfc1867_no_user_code.phpt",
+      "gitBlobSha1": "5fce976d982f1418aaf77be47083c279797d3088",
+      "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/rfc1867_no_user_code.phpt"
+    },
+    {
+      "path": "ext/session/tests/rfc1867_incomplete_class_reserved_props.phpt",
+      "gitBlobSha1": "954e46b7116b2da2bb6d8c39d0488f0b5e2a8c61",
+      "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/rfc1867_incomplete_class_reserved_props.phpt"
+    },
+    {
+      "path": "ext/session/tests/rfc1867_sid_invalid.phpt",
+      "gitBlobSha1": "53c2c0e5e6e696bd103a4fafe58ab4e115f307f2",
+      "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/rfc1867_sid_invalid.phpt"
+    },
+    {
+      "path": "ext/session/tests/skipif.inc",
+      "gitBlobSha1": "85569b2c0a884a7cb7ca332eb6fe0caa599de4e3",
+      "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/skipif.inc"
+    },
+    {
+      "path": "run-tests.php",
+      "ref": "136e049ac10b032c83018e65b63b6df858943750",
+      "bytes": 143191,
+      "gitBlobSha1": "3d0bc7241ba32687a1a49aa1978397c20f39d24c",
+      "sha256": "4cb444f39ef286daeb6358f3dcca5ea3a46162391e36334913c5dae03ab4b599",
+      "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/run-tests.php"
+    },
+    {
+      "path": "LICENSE",
+      "ref": "136e049ac10b032c83018e65b63b6df858943750",
+      "bytes": 3204,
+      "gitBlobSha1": "0815d7eb79119fe649e6c50e2af973cd56f043e2",
+      "sha256": "b42e4df5e50e6ecda1047d503d6d91d71032d09ed1027ba1ef29eed26f890c5a",
+      "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/LICENSE"
+    }
+  ],
+  "scope": "Selected official session-upload CGI regressions; not complete patch coverage, persistent-worker proof or deployed repair."
+}

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+lab/php-patched-validation/
+lab/windows/runs/
+lab/windows/*-console.txt
+*.zip
+.DS_Store
+cloud/build-context/
+cloud-results/
