@@ -51,6 +51,7 @@ jobs:
           if ($directories.Count -ne 1) { throw "Expected one patched event in this fresh checkout; found $($directories.Count)" }
           $run = $directories[0]
           ./lab/windows/Write-HostedPacket.ps1 -RunDirectory $run.FullName -OutputDirectory (Join-Path $PWD 'bootstrap-packet')
+          ./lab/windows/Test-HostedPacket.ps1 -RunDirectory $run.FullName -ScratchRoot $env:RUNNER_TEMP
       - name: Save sanitized bootstrap evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -58,3 +59,9 @@ jobs:
           path: bootstrap-packet/
           if-no-files-found: error
           retention-days: 14
+      - name: Explain an incomplete hosted check
+        if: failure()
+        shell: pwsh
+        run: |
+          '### No verified Windows bootstrap packet' >> $env:GITHUB_STEP_SUMMARY
+          'A launcher, acceptance, privacy or artifact step failed. Read the failing step log; this run does not establish a patched comparison. Raw run files stay on the temporary runner and are not published.' >> $env:GITHUB_STEP_SUMMARY

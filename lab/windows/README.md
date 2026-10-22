@@ -14,7 +14,7 @@ If a run stops after creating `runs/<event-id>/`, keep that directory as evidenc
 
 ## Hosted Windows bootstrap check
 
-The pull request workflow also runs the patched guided path on a fresh GitHub hosted `windows-2022` runner. It verifies the pinned downloads, selected receipt and process cleanup, then must upload a bounded packet with a path-sanitized JUnit file, the HTML report, hashes and runner identity for a green job. It excludes downloaded binaries and the raw local receipt. Read the saved artifact and its manifest alongside the exact workflow run and commit before citing the check.
+The pull request workflow also runs the patched guided path on a fresh GitHub hosted `windows-2022` runner. It verifies the pinned downloads, selected receipt and process cleanup, then must upload a bounded packet with normalized JUnit results, a newly generated HTML summary, checked hashes and runner identity for a green job. It excludes downloaded binaries and the raw local receipt, JUnit and report, which may contain host paths. Their recorded hashes do not let a reader recheck omitted raw bytes. Read the saved artifact and its manifest alongside the exact workflow run and commit before citing the check. A failed job retains its step log but makes no verified packet claim.
 
 GitHub's [Windows 2022 image inventory](https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md) lists a preinstalled Visual C++ 2022 x64 runtime. This check therefore does not prove setup on a bare Windows machine missing that prerequisite. It calls the noninteractive patched mode; a person still needs to check the double-click menu, download consent and browser report opening.
 
