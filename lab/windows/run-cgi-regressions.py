@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 import zipfile
@@ -80,12 +81,24 @@ def checked(ok):
 def blob_hash(data):
     return hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
 
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as stream:
+        for chunk in iter(lambda: stream.read(65536), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 def main():
     global RUNTIME, PHP
-    parser = argparse.ArgumentParser()
-    parser.add_argument('run_id')
-    parser.add_argument('--runtime-version', choices=['8.5.12','8.5.11'], default='8.5.12')
-    parser.add_argument('--allow-unpatched-reference', action='store_true')
+    parser = argparse.ArgumentParser(
+        description='Run selected PHP CGI session-upload regressions on this Windows computer.',
+        epilog='First-time users: double-click Start-Lab.cmd at the repository root. '
+               'Advanced example: python run-cgi-regressions.py local-patched-1 --runtime-version 8.5.12')
+    parser.add_argument('run_id', help='fresh lowercase ID for this observation; repeats never rerun PHP')
+    parser.add_argument('--runtime-version', choices=['8.5.12','8.5.11'], default='8.5.12',
+                        help='PHP version to test; the older release is reference-only')
+    parser.add_argument('--allow-unpatched-reference', action='store_true',
+                        help='explicitly allow the older, unpatched reference in this local lab')
     args = parser.parse_args()
     if args.runtime_version == '8.5.11' and not args.allow_unpatched_reference:
         raise RuntimeError('Unpatched reference requires explicit local comparison option')
@@ -96,11 +109,11 @@ def main():
     receipt_path = target / 'receipt.json'
     if receipt_path.exists():
         previous=json.loads(receipt_path.read_text(encoding='utf-8'))
-        if previous.get('runtimeVersion','8.5.12') != args.runtime_version:
-            raise RuntimeError('Run ID conflicts with a different runtime version')
+        if previous.get('runId') != args.run_id or previous.get('runtimeVersion','8.5.12') != args.runtime_version:
+            raise RuntimeError('Run ID conflicts with its saved receipt; inspect that event before proceeding')
         print(json.dumps({'replayed':True,'evidenceStatus':'historical receipt; current inputs were not executed',
                           'receipt':previous},indent=2))
-        raise SystemExit(0 if previous.get('selectedTestsPassed') else 1)
+        raise SystemExit(2)
     if target.exists(): raise RuntimeError('Unfinished run exists; reconcile it before another effect')
     manifest = json.loads((ROOT/'source-manifest.json').read_text(encoding='utf-8-sig'))
     entries = {item['path']: item for item in manifest['files']}
@@ -115,14 +128,30 @@ def main():
     archive = ROOT.parent/'php-patched-validation'/f'php-{args.runtime_version}-nts-Win32-vs17-x64.zip'
     expected_archive={'8.5.12':'2ab242af38d76bdf417cde5ec048b1bcd76a5a40f39a3d15d5f046f38571c477',
         '8.5.11':'0ea96e0d2b9b737a6036f05cf4e95c49313faa6d0f27bd97edb2742503f0c043'}[args.runtime_version]
-    if hashlib.sha256(archive.read_bytes()).hexdigest() != expected_archive:
+    if not archive.is_file():
+        raise RuntimeError(f'Missing PHP {args.runtime_version} archive. Run Start-Lab.cmd for guided setup, or follow lab/windows/README.md.')
+    if file_sha256(archive) != expected_archive:
         raise RuntimeError('Runtime archive identity mismatch')
     runtime_hashes = {}
     with zipfile.ZipFile(archive) as package:
+        entries = [item for item in package.infolist() if not item.is_dir()]
+        names = [item.filename for item in entries]
+        if len(names) != len(set(name.casefold() for name in names)) or any(
+                name.startswith(('/', '\\')) or '\\' in name or ':' in name or
+                any(part in ('', '.', '..') for part in name.split('/'))
+                for name in names):
+            raise RuntimeError('Runtime archive contains unsafe or duplicate paths')
+        if not RUNTIME.is_dir():
+            raise RuntimeError(f'Missing extracted PHP {args.runtime_version} runtime. Run Start-Lab.cmd for guided setup.')
+        actual_files = {path.relative_to(RUNTIME).as_posix().casefold() for path in RUNTIME.rglob('*') if path.is_file()}
+        if actual_files != {name.casefold() for name in names} or any(
+                path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
+                for path in RUNTIME.rglob('*')):
+            raise RuntimeError('Extracted PHP runtime contains missing, extra or linked files; no test started')
         for item in package.infolist():
             if item.is_dir(): continue
             expected = hashlib.sha256(package.read(item)).hexdigest()
-            actual = hashlib.sha256((RUNTIME/item.filename).read_bytes()).hexdigest()
+            actual = file_sha256(RUNTIME/item.filename)
             if actual != expected: raise RuntimeError(f'Extracted runtime changed: {item.filename}')
             runtime_hashes[item.filename] = actual
     addresses = sorted({x[4][0] for x in socket.getaddrinfo('localhost', None)})
@@ -150,7 +179,7 @@ def main():
     record = {'runId':args.run_id, 'runtimeVersion':args.runtime_version, 'selectedTests':SELECTED, 'command':command,
         'startedAtUtc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
         'localhostAddresses':addresses, 'environment':environment, 'deadlineSeconds':90,
-        'runtimeSha256':hashlib.sha256(PHP.read_bytes()).hexdigest(),
+        'runtimeSha256':file_sha256(PHP),
         'runtimeFileHashes':runtime_hashes,
         'harnessSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'sourceHashes':{name:hashlib.sha256((target/name).read_bytes()).hexdigest() for name in source_bytes},
@@ -180,6 +209,9 @@ def main():
             for relative, data in source_bytes.items():
                 if (target/relative).read_bytes() != data:
                     raise RuntimeError(f'Run-local source changed before process launch: {relative}')
+            for executable in ('php.exe', 'php-cgi.exe'):
+                if file_sha256(RUNTIME/executable) != runtime_hashes[executable]:
+                    raise RuntimeError(f'PHP runtime changed before process launch: {executable}')
             checked(create_process(str(PHP),cmdline,None,None,True,0x4|0x400|0x08000000,block,str(target),c.byref(si),c.byref(pi)))
             checked(assign_job(job,pi.hProcess)); assigned=True
             record['runnerProcessId']=pi.dwProcessId
@@ -239,4 +271,11 @@ def main():
     print(json.dumps(record,indent=2))
     raise SystemExit(0 if record['selectedTestsPassed'] else 1)
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, RuntimeError, ValueError, zipfile.BadZipFile) as error:
+        print(f'RPK Lab stopped: {error}', file=sys.stderr)
+        if isinstance(error, OSError):
+            print('If Windows reports a missing Visual C++ runtime DLL, use the official x64 redistributable linked in lab/windows/README.md.', file=sys.stderr)
+        raise SystemExit(2)

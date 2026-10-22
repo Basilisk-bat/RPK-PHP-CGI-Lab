@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 0027
+ulimit -c 0
 
 cp -R /opt/lab/. /work/
 {

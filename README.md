@@ -1,13 +1,22 @@
 # RPK PHP CGI Regression Lab
 
-This public lab runs selected official PHP session-upload regression tests against PHP 8.5.11 and 8.5.12. It helps maintainers reproduce a narrow patched/reference difference and inspect the limits of that evidence. It is an early project; no broad adoption or production protection is claimed.
+This public lab runs selected official PHP session-upload regression tests against PHP 8.5.11 and 8.5.12. It helps maintainers reproduce a narrow patched/reference difference and inspect the limits of that evidence. It does not scan or repair a website.
 
-## Run it
+## Start here
 
-- [`lab/windows/`](lab/windows/README.md) documents a Windows runner for locally downloaded, hash-checked PHP releases. It limits memory, process count and time, and saves receipts in an ignored local `runs/` directory.
-- [The manual cloud workflow](.github/workflows/php-cgi-cloud-lab.yml) builds hash-checked official PHP source archives in GitHub Actions, then runs the selected tests in containers with networking disabled. See [`cloud/`](cloud/README.md) for limits and [the public comparison](cloud/RESULT-20261022.md) for a checked run.
+**No local setup:** [Follow the hosted guide](cloud/QUICKSTART.md). GitHub Actions builds the pinned PHP source archives and runs the tests in bounded containers. You need a GitHub account and your own fork; you do not need PHP, Python, Docker, or a website address.
+
+**Windows x64, local:** Download this repository as a ZIP, extract it into a folder you can write to, and double-click [`Start-Lab.cmd`](Start-Lab.cmd). Choose the patched check. The launcher asks before downloading pinned official PHP and portable Python archives, checks their hashes and extracted bytes, and saves a plain-language local HTML report. It does not install PHP or Python system-wide. Allow about 200 MiB of local files and have at least 1 GiB of available memory and free disk space. The [Windows guide](lab/windows/README.md) covers the optional older reference, failures, raw receipts and limits. **This local path has no OS network or filesystem sandbox.** Use the hosted path if local isolation matters.
+
+Both paths run the same selected upstream fixtures. [The public cloud comparison](cloud/RESULT-20261022.md) records an earlier checked run and its exact commit; it is not proof of the current head until a new run is checked.
+
+For errors, use [troubleshooting](docs/TROUBLESHOOTING.md). The [security scope](SECURITY.md) explains what the execution bounds do and where trust remains. The [engine proposal audit](docs/ENGINE-AUDIT.md) records measured decisions about stronger isolation and crash telemetry.
 
 The selected upstream fixtures and PHP's test runner are pinned by Git blob and SHA-256 in [`source-manifest.json`](lab/windows/source-manifest.json). The source files retain the bundled [PHP License](lab/windows/source/LICENSE); original lab code and documentation use [Apache License 2.0](LICENSE).
+
+## Read the result
+
+Open `report.html` from a local run or downloaded cloud artifact. A patched pass means the three selected cases passed in that PHP release. The older reference is intentionally unpatched; its three failures can confirm the selected difference. A stopped run, missing artifact, or unchecked boundary establishes no comparison. Keep raw local receipts private when they contain machine paths.
 
 ## What a result means
 

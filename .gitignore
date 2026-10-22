@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 lab/php-patched-validation/
 lab/windows/runs/
+lab/windows/.runtime/
 lab/windows/*-console.txt
 *.zip
 .DS_Store

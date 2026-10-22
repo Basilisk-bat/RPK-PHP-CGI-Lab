@@ -1,0 +1,32 @@
+name: Windows launcher checks
+
+on:
+  pull_request:
+    paths:
+      - 'Start-Lab.cmd'
+      - 'lab/windows/**'
+      - '.github/workflows/windows-launcher-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inert-launcher-checks:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test launcher cache and report predicates in Windows PowerShell
+        shell: powershell
+        run: .\lab\windows\Test-Launcher.ps1
+      - name: Test launcher cache and report predicates in PowerShell 7
+        shell: pwsh
+        run: ./lab/windows/Test-Launcher.ps1
+      - name: Check Python runner source and help
+        shell: pwsh
+        run: |
+          python -m py_compile lab/windows/run-cgi-regressions.py
+          python lab/windows/run-cgi-regressions.py --help
