@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import sys
 
 
 LIMITS = {
@@ -68,12 +69,14 @@ def main():
     }
     line({'kind': 'begin', **context, 'fileCount': len(LIMITS), 'totalLimit': TOTAL_LIMIT})
     total = 0
+    rejected = []
     for name, maximum in LIMITS.items():
         data, error = read_regular(args.host / name, maximum)
         if data is not None and total + len(data) > TOTAL_LIMIT:
             data, error = None, 'total-limit'
         if data is None:
             line({'kind': 'file', **context, 'name': name, 'status': error})
+            rejected.append(name)
             continue
         total += len(data)
         encoded = base64.b64encode(data).decode('ascii')
@@ -86,7 +89,11 @@ def main():
             line({'kind': 'chunk', **context, 'name': name,
                   'index': index, 'data': chunk})
     line({'kind': 'end', **context, 'copiedBytes': total})
+    if rejected:
+        print('Incomplete bounded job-log evidence: ' + ', '.join(rejected), file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
