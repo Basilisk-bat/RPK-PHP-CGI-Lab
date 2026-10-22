@@ -8,21 +8,25 @@
     {
       "path": "ext/session/tests/rfc1867_no_user_code.phpt",
       "gitBlobSha1": "5fce976d982f1418aaf77be47083c279797d3088",
+      "sha256": "220046e362cacd61b27a79e468b5f738ce541cb52b2b509c424fdd7a8e52890a",
       "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/rfc1867_no_user_code.phpt"
     },
     {
       "path": "ext/session/tests/rfc1867_incomplete_class_reserved_props.phpt",
       "gitBlobSha1": "954e46b7116b2da2bb6d8c39d0488f0b5e2a8c61",
+      "sha256": "b3ecd87bdb508f65f7ffd220734ab84f7beb920b80a41f6751438667ef4e16ee",
       "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/rfc1867_incomplete_class_reserved_props.phpt"
     },
     {
       "path": "ext/session/tests/rfc1867_sid_invalid.phpt",
       "gitBlobSha1": "53c2c0e5e6e696bd103a4fafe58ab4e115f307f2",
+      "sha256": "545f266aca1c9f5bcd64e8b5dc704d4f6bbeb4b65eeb09e116e42666861aed54",
       "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/rfc1867_sid_invalid.phpt"
     },
     {
       "path": "ext/session/tests/skipif.inc",
       "gitBlobSha1": "85569b2c0a884a7cb7ca332eb6fe0caa599de4e3",
+      "sha256": "5cdb71271cc6a800982f7e478e4387ab375477cbcc355a21724c8bb4c99e1980",
       "url": "https://github.com/php/php-src/blob/136e049ac10b032c83018e65b63b6df858943750/ext/session/tests/skipif.inc"
     },
     {

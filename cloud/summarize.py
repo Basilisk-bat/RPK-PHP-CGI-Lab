@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import sys
 import xml.etree.ElementTree as ET
@@ -13,6 +14,31 @@ SELECTED = {
     'rfc1867_incomplete_class_reserved_props.phpt',
     'rfc1867_sid_invalid.phpt',
 }
+SOURCE_MANIFEST = Path(__file__).resolve().parent.parent / 'lab' / 'windows' / 'source-manifest.json'
+PHP_BINARY_PATHS = {'/src/sapi/cli/php', '/src/sapi/cgi/php-cgi'}
+HASH_LINE = re.compile(r'^([0-9a-f]{64})  (/[^\r\n]+)$')
+
+
+def fixture_hashes_match(identity: bytes) -> bool:
+    manifest = json.loads(SOURCE_MANIFEST.read_text(encoding='utf-8-sig'))
+    expected = {'/work/' + entry['path']: entry['sha256'] for entry in manifest['files']}
+    if len(expected) != len(manifest['files']):
+        return False
+    try:
+        lines = identity.decode('utf-8').splitlines()
+    except UnicodeDecodeError:
+        return False
+    observed = {}
+    for line in lines:
+        match = HASH_LINE.fullmatch(line)
+        if match:
+            digest, path = match.groups()
+            if path in observed:
+                return False
+            observed[path] = digest
+    if set(observed) != set(expected) | PHP_BINARY_PATHS:
+        return False
+    return all(observed[path] == digest for path, digest in expected.items())
 
 def read_guest_regular(path: Path, maximum: int) -> bytes:
     """Read a stopped container's output without following links or accepting bulk data."""
@@ -48,6 +74,7 @@ def main():
     wait_exit = int((host / 'docker-wait-exit.txt').read_text(encoding='utf-8').strip())
     junit = read_guest_regular(guest / 'junit.xml', 1_048_576)
     identity = read_guest_regular(guest / 'identity.txt', 65_536)
+    fixture_hashes_verified = fixture_hashes_match(identity)
     (host / 'junit.xml').write_bytes(junit)
     (host / 'identity.txt').write_bytes(identity)
 
@@ -106,7 +133,7 @@ def main():
     failed = sum(case['failures'] > 0 or case['errors'] > 0 for case in cases)
     expected_exit = 0 if args.version == '8.5.12' else 1
     exit_verified = wait_exit == inspect.get('exitCode') == expected_exit
-    outcome_verified = selected_match and clean_cases and exit_verified and (
+    outcome_verified = selected_match and clean_cases and exit_verified and fixture_hashes_verified and (
         (args.version == '8.5.12' and passed == 3) or
         (args.version == '8.5.11' and failed == 3)
     )
@@ -116,6 +143,7 @@ def main():
         'version': args.version,
         'boundaryVerified': boundary_verified,
         'selectedIdentityMatch': selected_match,
+        'fixtureHashesVerified': fixture_hashes_verified,
         'exitVerified': exit_verified,
         'selectedOutcomeVerified': outcome_verified,
         'passed': passed,

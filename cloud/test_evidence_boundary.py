@@ -20,7 +20,8 @@ def load(name):
     return module
 
 
-def summarize_case(summarize, root, label, version, changes=None, failures=False):
+def summarize_case(summarize, root, label, version, changes=None, failures=False,
+                   bad_fixture_hash=False):
     host = root / label / 'host'
     guest = root / label / 'guest'
     host.mkdir(parents=True)
@@ -50,7 +51,15 @@ def summarize_case(summarize, root, label, version, changes=None, failures=False
         ('<failure>regression</failure>' if failures else '') +
         '</testcase>' for name in names) + '</testsuite></testsuites>'
     (guest / 'junit.xml').write_text(xml, encoding='utf-8')
-    (guest / 'identity.txt').write_text('synthetic identity\n', encoding='utf-8')
+    source_manifest = json.loads((HERE.parent / 'lab' / 'windows' / 'source-manifest.json')
+                                 .read_text(encoding='utf-8'))
+    identity_lines = [f'PHP {version} (synthetic)',
+                      'a' * 64 + '  /src/sapi/cli/php',
+                      'b' * 64 + '  /src/sapi/cgi/php-cgi']
+    for index, entry in enumerate(source_manifest['files']):
+        digest = '0' * 64 if bad_fixture_hash and index == 0 else entry['sha256']
+        identity_lines.append(f"{digest}  /work/{entry['path']}")
+    (guest / 'identity.txt').write_text('\n'.join(identity_lines) + '\n', encoding='utf-8')
     saved_argv = sys.argv
     try:
         sys.argv = ['summarize.py', '--version', version, '--event', label,
@@ -86,10 +95,14 @@ def main():
             summarize, root, 'timeout', '8.5.12', {'exitCode': 124})
         reference, reference_result = summarize_case(
             summarize, root, 'reference', '8.5.11', failures=True)
+        bad_hash, bad_hash_result = summarize_case(
+            summarize, root, 'bad-hash', '8.5.12', bad_fixture_hash=True)
         assert good == 0 and good_result['boundaryVerified'] and good_result['selectedOutcomeVerified']
+        assert good_result['fixtureHashesVerified']
         assert extra == 1 and not extra_result['boundaryVerified']
         assert timeout == 1 and not timeout_result['exitVerified']
         assert reference == 0 and reference_result['failed'] == 3
+        assert bad_hash == 1 and not bad_hash_result['fixtureHashesVerified']
 
         host = root / 'patched' / 'host'
         saved_argv = sys.argv
