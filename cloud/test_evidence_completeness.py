@@ -34,15 +34,13 @@ class EvidenceCompletenessTests(unittest.TestCase):
     def emit(self, host, run_id='142', attempt='1'):
         event = f'github-{run_id}-{attempt}-{VERSION}'
         output, errors = io.StringIO(), io.StringIO()
-        if not hasattr(os, 'O_NOFOLLOW'):
-            os.O_NOFOLLOW = 0  # Windows synthetic check; hosted Linux uses O_NOFOLLOW.
-        if not hasattr(os, 'O_NONBLOCK'):
-            os.O_NONBLOCK = 0
-        with patch.object(sys, 'argv', ['emit_log_evidence.py', '--host', str(host),
-                                        '--event', event]), patch.dict(os.environ, {
-                                            'GITHUB_REPOSITORY': REPOSITORY,
-                                            'GITHUB_SHA': COMMIT,
-                                        }), contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+        with (patch.object(os, 'O_NOFOLLOW', getattr(os, 'O_NOFOLLOW', 0), create=True),
+              patch.object(os, 'O_NONBLOCK', getattr(os, 'O_NONBLOCK', 0), create=True),
+              patch.object(sys, 'argv', ['emit_log_evidence.py', '--host', str(host),
+                                         '--event', event]),
+              patch.dict(os.environ, {'GITHUB_REPOSITORY': REPOSITORY,
+                                      'GITHUB_SHA': COMMIT}),
+              contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors)):
             code = emitter.main()
         return code, output.getvalue(), errors.getvalue()
 
