@@ -8,7 +8,7 @@ This public lab runs selected official PHP session-upload regression tests again
 
 **Windows x64, local:** Download this repository as a ZIP, extract it into a folder you can write to, and double-click [`Start-Lab.cmd`](Start-Lab.cmd). Choose the patched check. The launcher asks before downloading pinned official PHP and portable Python archives, checks their hashes and extracted bytes, and saves a plain-language local HTML report. It does not install PHP or Python system-wide. Allow about 200 MiB of local files and have at least 1 GiB of available memory and free disk space. The [Windows guide](lab/windows/README.md) covers the optional older reference, failures, raw receipts and limits. **This local path has no OS network or filesystem sandbox.** Use the hosted path if local isolation matters.
 
-Both paths run the same selected upstream fixtures. [The public cloud comparison](cloud/RESULT-20261022.md) records an earlier checked run and its exact commit; it is not proof of the current head until a new run is checked.
+Both paths run the same selected upstream fixtures. [The public cloud comparison](cloud/RESULT-20261022.md) records checked runs and their exact tested commits. A later source or workflow change needs its own run; a documentation change is not a new experiment.
 
 For errors, use [troubleshooting](docs/TROUBLESHOOTING.md). The [security scope](SECURITY.md) explains what the execution bounds do and where trust remains. The [engine proposal audit](docs/ENGINE-AUDIT.md) records measured decisions about stronger isolation and crash telemetry.
 
