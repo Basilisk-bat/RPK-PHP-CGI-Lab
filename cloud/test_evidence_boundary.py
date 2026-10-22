@@ -32,7 +32,9 @@ def summarize_case(summarize, root, label, version, changes=None, failures=False
         'capDrop': ['ALL'], 'capAdd': [],
         'securityOpt': ['no-new-privileges'], 'privileged': False,
         'pidMode': '', 'ipcMode': 'private', 'utsMode': '',
-        'user': '10001:10001', 'tmpfs': {'/work': 'rw', '/tmp': 'rw'},
+        'user': '10001:10001', 'tmpfs': {
+            '/work': 'rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700',
+            '/tmp': 'rw,noexec,nosuid,nodev,size=64m,mode=1777'},
         'mounts': [{'Type': 'bind', 'Source': str(guest.resolve()),
                     'Destination': '/results', 'RW': True}],
         'requestedMounts': [{'Type': 'bind', 'Source': str(guest.resolve()),
@@ -111,10 +113,35 @@ def main():
         duplicate_version, duplicate_version_result = summarize_case(
             summarize, root, 'duplicate-version', '8.5.12', header_variant='duplicate')
         assert good == 0 and good_result['boundaryVerified'] and good_result['selectedOutcomeVerified']
+        assert 'Selected patched checks passed' in (root / 'patched' / 'host' / 'report.html').read_text()
         assert good_result['fixtureHashesVerified'] and good_result['runtimeVersionVerified']
         assert extra == 1 and not extra_result['boundaryVerified']
+        tmpfs_exec, tmpfs_exec_result = summarize_case(
+            summarize, root, 'tmpfs-exec', '8.5.12',
+            {'tmpfs': {'/work': 'rw,exec,size=128m', '/tmp': 'rw,noexec,nosuid,nodev,size=64m'}})
+        assert tmpfs_exec == 1 and not tmpfs_exec_result['boundaryVerified']
+        work_options = 'rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700'
+        tmp_options = 'rw,noexec,nosuid,nodev,size=64m,mode=1777'
+        for label, suffix in (
+            ('opposite-exec', ',exec'), ('opposite-suid', ',suid'),
+            ('opposite-dev', ',dev'), ('opposite-ro', ',ro'),
+            ('duplicate-rw', ',rw'), ('changed-size', ',size=256m'),
+            ('empty-option', ','), ('unknown-option', ',foo=bar'),
+        ):
+            code, result = summarize_case(
+                summarize, root, label, '8.5.12',
+                {'tmpfs': {'/work': work_options + suffix, '/tmp': tmp_options}})
+            assert code == 1 and not result['boundaryVerified'], label
+        for label, suffix in (('tmp-opposite-exec', ',exec'),
+                              ('tmp-extra-value', ',mode=0700')):
+            code, result = summarize_case(
+                summarize, root, label, '8.5.12',
+                {'tmpfs': {'/work': work_options, '/tmp': tmp_options + suffix}})
+            assert code == 1 and not result['boundaryVerified'], label
         assert timeout == 1 and not timeout_result['exitVerified']
+        assert 'No verified comparison' in (root / 'timeout' / 'host' / 'report.html').read_text()
         assert reference == 0 and reference_result['failed'] == 3
+        assert 'Older reference showed the selected difference' in (root / 'reference' / 'host' / 'report.html').read_text()
         assert bad_hash == 1 and not bad_hash_result['fixtureHashesVerified']
         assert wrong_version == 1 and not wrong_version_result['runtimeVersionVerified']
         assert missing_version == 1 and not missing_version_result['runtimeVersionVerified']
@@ -170,6 +197,23 @@ def main():
         assert saved == original, (len(saved), len(original),
                                    hashlib.sha256(saved).hexdigest(),
                                    hashlib.sha256(original).hexdigest())
+        if os.name == 'posix':
+            symlink = root / 'guest-link.xml'
+            symlink.symlink_to(host / 'summary.json')
+            try:
+                summarize.read_guest_regular(symlink, 1_048_576)
+            except OSError:
+                pass
+            else:
+                raise AssertionError('Guest symlink was followed')
+            fifo = root / 'guest-fifo.xml'
+            os.mkfifo(fifo)
+            try:
+                summarize.read_guest_regular(fifo, 1_048_576)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('Guest FIFO was accepted')
     print('synthetic boundary and log reconstruction checks passed')
 
 

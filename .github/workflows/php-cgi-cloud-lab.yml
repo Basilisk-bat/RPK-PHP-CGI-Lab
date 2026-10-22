@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           mkdir -p cloud/build-context/src "cloud-results/$PHP_VERSION/host" "cloud-results/$PHP_VERSION/guest"
           python3 cloud/verify_source_manifest.py
+          python3 cloud/test_evidence_boundary.py
           cp -R lab/windows/source/. cloud/build-context/src/
           cp cloud/run.sh cloud/build-context/run.sh
           curl --fail --location --proto '=https' --tlsv1.2 --retry 2 \
@@ -63,8 +64,8 @@ jobs:
           docker create --name "$container" --network none --read-only \
             --memory 512m --pids-limit 64 --cpus 2 \
             --cap-drop ALL --security-opt no-new-privileges \
-            --tmpfs /work:rw,exec,size=128m,uid=10001,gid=10001,mode=0700 \
-            --tmpfs /tmp:rw,exec,size=64m,mode=1777 \
+            --tmpfs /work:rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777 \
             --mount "type=bind,src=$PWD/$guest,dst=/results" \
             "rpk-php-cgi:$PHP_VERSION" > "$host/container-id.txt"
           docker start "$container" > "$host/docker-start-output.txt"
@@ -79,6 +80,17 @@ jobs:
             > "$host/inspect.json"
           python3 cloud/summarize.py --version "$PHP_VERSION" --event "$event" --host "$host" --guest "$guest"
 
+      - name: Show plain-language result
+        if: always()
+        shell: bash
+        run: |
+          report="cloud-results/$PHP_VERSION/host/report.md"
+          if test -f "$report"; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '### PHP %s: no verified result report\n\nThe job stopped before creating a checked summary. Inspect the failing step; no comparison claim is established.\n' "$PHP_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Emit bounded evidence in job log
         if: always()
         shell: bash
@@ -88,10 +100,9 @@ jobs:
 
       - name: Save bounded run evidence
         if: always()
-        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: php-cgi-${{ matrix.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: cloud-results/${{ matrix.version }}/host/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14

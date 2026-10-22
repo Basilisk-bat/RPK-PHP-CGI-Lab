@@ -1,0 +1,67 @@
+name: Windows launcher checks
+
+on:
+  pull_request:
+    paths:
+      - 'Start-Lab.cmd'
+      - 'lab/windows/**'
+      - '.github/workflows/windows-launcher-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inert-launcher-checks:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test launcher cache and report predicates in Windows PowerShell
+        shell: powershell
+        run: .\lab\windows\Test-Launcher.ps1
+      - name: Test launcher cache and report predicates in PowerShell 7
+        shell: pwsh
+        run: ./lab/windows/Test-Launcher.ps1
+      - name: Check Python runner source and help
+        shell: pwsh
+        run: |
+          python -m py_compile lab/windows/run-cgi-regressions.py
+          if ($LASTEXITCODE -ne 0) { throw "Python compile failed with exit code $LASTEXITCODE" }
+          python lab/windows/run-cgi-regressions.py --help
+          if ($LASTEXITCODE -ne 0) { throw "Python help check failed with exit code $LASTEXITCODE" }
+
+  fresh-patched-launcher:
+    needs: inert-launcher-checks
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Download pinned runtimes and run patched checks on a fresh host
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          & "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File .\lab\windows\Start-Lab.ps1 -Mode patched -AcceptDownloads -NoOpen
+          if ($LASTEXITCODE -ne 0) { throw "Guided patched run failed with exit code $LASTEXITCODE" }
+          $directories = @(Get-ChildItem -LiteralPath lab/windows/runs -Directory)
+          if ($directories.Count -ne 1) { throw "Expected one patched event in this fresh checkout; found $($directories.Count)" }
+          $run = $directories[0]
+          ./lab/windows/Write-HostedPacket.ps1 -RunDirectory $run.FullName -OutputDirectory (Join-Path $PWD 'bootstrap-packet')
+          ./lab/windows/Test-HostedPacket.ps1 -RunDirectory $run.FullName -ScratchRoot $env:RUNNER_TEMP
+      - name: Save sanitized bootstrap evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-patched-bootstrap-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bootstrap-packet/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Explain an incomplete hosted check
+        if: failure()
+        shell: pwsh
+        run: |
+          '### No verified Windows bootstrap packet' >> $env:GITHUB_STEP_SUMMARY
+          'A launcher, acceptance, privacy or artifact step failed. Read the failing step log; this run does not establish a patched comparison. Raw run files stay on the temporary runner and are not published.' >> $env:GITHUB_STEP_SUMMARY
