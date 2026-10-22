@@ -21,7 +21,7 @@ def load(name):
 
 
 def summarize_case(summarize, root, label, version, changes=None, failures=False,
-                   bad_fixture_hash=False):
+                   bad_fixture_hash=False, header_variant=None):
     host = root / label / 'host'
     guest = root / label / 'guest'
     host.mkdir(parents=True)
@@ -53,8 +53,15 @@ def summarize_case(summarize, root, label, version, changes=None, failures=False
     (guest / 'junit.xml').write_text(xml, encoding='utf-8')
     source_manifest = json.loads((HERE.parent / 'lab' / 'windows' / 'source-manifest.json')
                                  .read_text(encoding='utf-8'))
-    identity_lines = [f'PHP {version} (synthetic)',
-                      'a' * 64 + '  /src/sapi/cli/php',
+    headers = [f'PHP {version} (cli) (synthetic)',
+               f'PHP {version} (cgi-fcgi) (synthetic)']
+    if header_variant == 'wrong':
+        headers[0] = 'PHP 8.5.99 (cli) (synthetic)'
+    elif header_variant == 'missing':
+        headers = headers[1:]
+    elif header_variant == 'duplicate':
+        headers.append(headers[0])
+    identity_lines = headers + ['a' * 64 + '  /src/sapi/cli/php',
                       'b' * 64 + '  /src/sapi/cgi/php-cgi']
     for index, entry in enumerate(source_manifest['files']):
         digest = '0' * 64 if bad_fixture_hash and index == 0 else entry['sha256']
@@ -97,12 +104,21 @@ def main():
             summarize, root, 'reference', '8.5.11', failures=True)
         bad_hash, bad_hash_result = summarize_case(
             summarize, root, 'bad-hash', '8.5.12', bad_fixture_hash=True)
+        wrong_version, wrong_version_result = summarize_case(
+            summarize, root, 'wrong-version', '8.5.12', header_variant='wrong')
+        missing_version, missing_version_result = summarize_case(
+            summarize, root, 'missing-version', '8.5.12', header_variant='missing')
+        duplicate_version, duplicate_version_result = summarize_case(
+            summarize, root, 'duplicate-version', '8.5.12', header_variant='duplicate')
         assert good == 0 and good_result['boundaryVerified'] and good_result['selectedOutcomeVerified']
-        assert good_result['fixtureHashesVerified']
+        assert good_result['fixtureHashesVerified'] and good_result['runtimeVersionVerified']
         assert extra == 1 and not extra_result['boundaryVerified']
         assert timeout == 1 and not timeout_result['exitVerified']
         assert reference == 0 and reference_result['failed'] == 3
         assert bad_hash == 1 and not bad_hash_result['fixtureHashesVerified']
+        assert wrong_version == 1 and not wrong_version_result['runtimeVersionVerified']
+        assert missing_version == 1 and not missing_version_result['runtimeVersionVerified']
+        assert duplicate_version == 1 and not duplicate_version_result['runtimeVersionVerified']
 
         host = root / 'patched' / 'host'
         saved_argv = sys.argv

@@ -17,6 +17,20 @@ SELECTED = {
 SOURCE_MANIFEST = Path(__file__).resolve().parent.parent / 'lab' / 'windows' / 'source-manifest.json'
 PHP_BINARY_PATHS = {'/src/sapi/cli/php', '/src/sapi/cgi/php-cgi'}
 HASH_LINE = re.compile(r'^([0-9a-f]{64})  (/[^\r\n]+)$')
+VERSION_LINE = re.compile(r'^PHP ([0-9]+\.[0-9]+\.[0-9]+) \((cli|cgi-fcgi)\)(?: .*)?$')
+
+
+def runtime_headers_match(identity: bytes, version: str) -> bool:
+    try:
+        headers = [line for line in identity.decode('utf-8').splitlines() if line.startswith('PHP ')]
+    except UnicodeDecodeError:
+        return False
+    if len(headers) != 2:
+        return False
+    parsed = [VERSION_LINE.fullmatch(line) for line in headers]
+    return all(parsed) and {(match.group(1), match.group(2)) for match in parsed} == {
+        (version, 'cli'), (version, 'cgi-fcgi')
+    }
 
 
 def fixture_hashes_match(identity: bytes) -> bool:
@@ -75,6 +89,7 @@ def main():
     junit = read_guest_regular(guest / 'junit.xml', 1_048_576)
     identity = read_guest_regular(guest / 'identity.txt', 65_536)
     fixture_hashes_verified = fixture_hashes_match(identity)
+    runtime_version_verified = runtime_headers_match(identity, args.version)
     (host / 'junit.xml').write_bytes(junit)
     (host / 'identity.txt').write_bytes(identity)
 
@@ -133,7 +148,8 @@ def main():
     failed = sum(case['failures'] > 0 or case['errors'] > 0 for case in cases)
     expected_exit = 0 if args.version == '8.5.12' else 1
     exit_verified = wait_exit == inspect.get('exitCode') == expected_exit
-    outcome_verified = selected_match and clean_cases and exit_verified and fixture_hashes_verified and (
+    outcome_verified = (selected_match and clean_cases and exit_verified
+                        and fixture_hashes_verified and runtime_version_verified) and (
         (args.version == '8.5.12' and passed == 3) or
         (args.version == '8.5.11' and failed == 3)
     )
@@ -144,6 +160,7 @@ def main():
         'boundaryVerified': boundary_verified,
         'selectedIdentityMatch': selected_match,
         'fixtureHashesVerified': fixture_hashes_verified,
+        'runtimeVersionVerified': runtime_version_verified,
         'exitVerified': exit_verified,
         'selectedOutcomeVerified': outcome_verified,
         'passed': passed,
