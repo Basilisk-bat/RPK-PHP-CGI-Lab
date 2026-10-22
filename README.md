@@ -5,7 +5,7 @@ This public lab runs selected official PHP session-upload regression tests again
 ## Run it
 
 - [`lab/windows/`](lab/windows/README.md) documents a Windows runner for locally downloaded, hash-checked PHP releases. It limits memory, process count and time, and saves receipts in an ignored local `runs/` directory.
-- [The manual cloud workflow](.github/workflows/php-cgi-cloud-lab.yml) builds hash-checked official PHP source archives in GitHub Actions, then runs the selected tests in containers with networking disabled. See [`cloud/`](cloud/README.md) for limits and evidence readback.
+- [The manual cloud workflow](.github/workflows/php-cgi-cloud-lab.yml) builds hash-checked official PHP source archives in GitHub Actions, then runs the selected tests in containers with networking disabled. See [`cloud/`](cloud/README.md) for limits and [the public comparison](cloud/RESULT-20261022.md) for a checked run.
 
 The selected upstream fixtures and PHP's test runner are pinned by Git blob and SHA-256 in [`source-manifest.json`](lab/windows/source-manifest.json). The source files retain the bundled [PHP License](lab/windows/source/LICENSE); original lab code and documentation use [Apache License 2.0](LICENSE).
 
