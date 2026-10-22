@@ -93,13 +93,18 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     for name, content in decoded.items():
         (args.output / name).write_bytes(content)
+    all_files_present = all(status == 'present' for status in statuses.values())
     report = {'schema': 'rpk.php.cloud-log-readback.v1', **context,
               'runId': args.run_id, 'attempt': args.attempt, 'jobId': args.job_id,
               'version': args.version, 'files': statuses,
-              'completeEnvelope': True, 'savedBytes': copied_bytes}
+              'completeEnvelope': True, 'allFilesPresent': all_files_present,
+              'resultStatus': 'saved-records-only' if all_files_present else 'incomplete',
+              'selectedResultVerified': None if all_files_present else False,
+              'savedBytes': copied_bytes}
     (args.output / 'readback.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
+    return 0 if all_files_present else 1
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

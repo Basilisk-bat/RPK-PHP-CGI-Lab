@@ -34,6 +34,7 @@ jobs:
           mkdir -p cloud/build-context/src "cloud-results/$PHP_VERSION/host" "cloud-results/$PHP_VERSION/guest"
           python3 cloud/verify_source_manifest.py
           python3 cloud/test_evidence_boundary.py
+          python3 cloud/test_evidence_completeness.py
           cp -R lab/windows/source/. cloud/build-context/src/
           cp cloud/run.sh cloud/build-context/run.sh
           curl --fail --location --proto '=https' --tlsv1.2 --retry 2 \
