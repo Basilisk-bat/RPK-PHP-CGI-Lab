@@ -32,6 +32,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Python compile failed with exit code $LASTEXITCODE" }
           python lab/windows/run-cgi-regressions.py --help
           if ($LASTEXITCODE -ne 0) { throw "Python help check failed with exit code $LASTEXITCODE" }
+      - name: Test startup prerequisites and replay without launching PHP
+        shell: pwsh
+        run: |
+          python -B lab/windows/test_runner_preflight.py
+          if ($LASTEXITCODE -ne 0) { throw "Runner preflight checks failed with exit code $LASTEXITCODE" }
 
   fresh-patched-launcher:
     needs: inert-launcher-checks

@@ -11,6 +11,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import subprocess
 import sys
@@ -88,6 +89,63 @@ def file_sha256(path):
             digest.update(chunk)
     return digest.hexdigest()
 
+
+def runtime_launch_preflight(runtime, version):
+    """Check the verified executables without reserving an observation directory."""
+    system = os.environ.get('SystemRoot')
+    if not system:
+        raise RuntimeError('SystemRoot is unavailable; no run ID was reserved')
+    environment = {'SystemRoot': system, 'WINDIR': system,
+        'COMSPEC': str(Path(system)/'System32/cmd.exe'),
+        'PATH': str(runtime)+';'+str(Path(system)/'System32'),
+        'PATHEXT': '.COM;.EXE;.BAT;.CMD'}
+    for name, sapi in (('php.exe', 'cli'), ('php-cgi.exe', 'cgi-fcgi')):
+        try:
+            result = subprocess.run([str(runtime/name), '-n', '-v'],
+                cwd=runtime, env=environment, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=8,
+                creationflags=subprocess.CREATE_NO_WINDOW, check=False)
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f'{name} version preflight timed out; no run ID was reserved') from error
+        except OSError as error:
+            raise RuntimeError(f'{name} could not start (Windows error {getattr(error, "winerror", None)}); '
+                'check the required Visual C++ runtime and DLLs; no run ID was reserved') from error
+        if result.returncode != 0:
+            code = result.returncode & 0xffffffff
+            hint = ('Missing DLL; check the required Visual C++ runtime and DLLs'
+                    if code == 0xc0000135 else 'Check the runtime and its dependencies')
+            raise RuntimeError(f'{name} version preflight exited 0x{code:08x}. '
+                f'{hint}; no run ID was reserved')
+        if len(result.stdout) > 16384 or len(result.stderr) > 16384:
+            raise RuntimeError(f'{name} version preflight output exceeds its limit; no run ID was reserved')
+        first_line = result.stdout.decode('utf-8', errors='replace').splitlines()[:1]
+        expected = rf'PHP {re.escape(version)} \({re.escape(sapi)}\)(?: .*)?'
+        if not first_line or re.fullmatch(expected, first_line[0]) is None:
+            raise RuntimeError(f'{name} did not report PHP {version} ({sapi}); no run ID was reserved')
+
+
+def create_verified_job():
+    """Configure and read back process limits before an observation is reserved."""
+    job = create_job(None, None)
+    checked(job)
+    try:
+        limits = ExtendedLimit()
+        limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x200 | 0x8
+        limits.JobMemoryLimit = 256 * 1024 * 1024
+        limits.BasicLimitInformation.ActiveProcessLimit = 16
+        checked(set_job(job, 9, c.byref(limits), c.sizeof(limits)))
+        configured = ExtendedLimit()
+        checked(query_job(job, 9, c.byref(configured), c.sizeof(configured), None))
+        if (configured.JobMemoryLimit != 256 * 1024 * 1024
+                or configured.BasicLimitInformation.ActiveProcessLimit != 16
+                or configured.BasicLimitInformation.LimitFlags & 0x2208 != 0x2208):
+            raise RuntimeError('Owned job limits did not match the requested memory/process/cleanup settings; no run ID was reserved')
+    except BaseException:
+        close(job)
+        raise
+    return job
+
+
 def main():
     global RUNTIME, PHP
     parser = argparse.ArgumentParser(
@@ -160,46 +218,44 @@ def main():
     memory = MemoryStatus(); memory.dwLength = c.sizeof(memory); checked(memory_status(c.byref(memory)))
     if memory.ullAvailPhys < 1024 * 1024 * 1024:
         raise RuntimeError('Available physical memory is below the 1024 MiB execution guard; no PHP test started')
-    target.mkdir(parents=True)
-    temporary = target/'tmp'; temporary.mkdir()
-    for relative, data in source_bytes.items():
-        destination = target/relative; destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(data)
-        if destination.read_bytes() != data:
-            raise RuntimeError(f'Run-local source differs from verified bytes: {relative}')
-    system = os.environ['SystemRoot']
-    environment = {'SystemRoot':system, 'WINDIR':system, 'COMSPEC':str(Path(system)/'System32/cmd.exe'),
-        'PATH':str(RUNTIME)+';'+str(Path(system)/'System32'), 'PATHEXT':'.COM;.EXE;.BAT;.CMD',
-        'TEMP':str(temporary), 'TMP':str(temporary), 'USE_ZEND_ALLOC':'1',
-        'TEST_PHP_EXECUTABLE':str(PHP), 'TEST_PHP_CGI_EXECUTABLE':str(RUNTIME/'php-cgi.exe'), 'TEST_PHP_SRCDIR':str(target),
-        'TEST_PHP_JUNIT':str(target/'junit.xml'), 'REPORT_EXIT_STATUS':'1'}
-    command = [str(PHP), '-n', '-d', 'memory_limit=64M', str(target/'run-tests.php'),
-        '-n', '-q', '--offline', '--set-timeout', '20', '-p', str(PHP), '-d', 'memory_limit=64M']
-    command.extend(str(target/x) for x in SELECTED)
-    record = {'runId':args.run_id, 'runtimeVersion':args.runtime_version, 'selectedTests':SELECTED, 'command':command,
-        'startedAtUtc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
-        'localhostAddresses':addresses, 'environment':environment, 'deadlineSeconds':90,
-        'runtimeSha256':file_sha256(PHP),
-        'runtimeFileHashes':runtime_hashes,
-        'harnessSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        'sourceHashes':{name:hashlib.sha256((target/name).read_bytes()).hexdigest() for name in source_bytes},
-        'networkIsolation':False, 'serverBinding':'none requested; selected CGI fixtures use pipes and synthetic local files',
-        'availablePhysicalMiBBeforeStart':round(memory.ullAvailPhys/(1024*1024),2),
-        'jobCommittedMemoryLimitBytes':256*1024*1024, 'jobActiveProcessLimit':16,
-        'limitScope':'These are execution bounds on this owned process tree, not PHP configuration mitigations or proof of memory-safety coverage.',
-        'proofScope':'selected CGI session-upload behavior; fresh CGI processes, not persistent-worker or deployed-service proof'}
-    (target/'request.json').write_text(json.dumps(record,indent=2),encoding='utf-8')
-    job = create_job(None,None); checked(job)
+    runtime_launch_preflight(RUNTIME, args.runtime_version)
+    job = create_verified_job()
+    try:
+        target.mkdir(parents=True)
+        temporary = target/'tmp'; temporary.mkdir()
+        for relative, data in source_bytes.items():
+            destination = target/relative; destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+            if destination.read_bytes() != data:
+                raise RuntimeError(f'Run-local source differs from verified bytes: {relative}')
+        system = os.environ['SystemRoot']
+        environment = {'SystemRoot':system, 'WINDIR':system, 'COMSPEC':str(Path(system)/'System32/cmd.exe'),
+            'PATH':str(RUNTIME)+';'+str(Path(system)/'System32'), 'PATHEXT':'.COM;.EXE;.BAT;.CMD',
+            'TEMP':str(temporary), 'TMP':str(temporary), 'USE_ZEND_ALLOC':'1',
+            'TEST_PHP_EXECUTABLE':str(PHP), 'TEST_PHP_CGI_EXECUTABLE':str(RUNTIME/'php-cgi.exe'), 'TEST_PHP_SRCDIR':str(target),
+            'TEST_PHP_JUNIT':str(target/'junit.xml'), 'REPORT_EXIT_STATUS':'1'}
+        command = [str(PHP), '-n', '-d', 'memory_limit=64M', str(target/'run-tests.php'),
+            '-n', '-q', '--offline', '--set-timeout', '20', '-p', str(PHP), '-d', 'memory_limit=64M']
+        command.extend(str(target/x) for x in SELECTED)
+        record = {'runId':args.run_id, 'runtimeVersion':args.runtime_version, 'selectedTests':SELECTED, 'command':command,
+            'startedAtUtc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+            'localhostAddresses':addresses, 'environment':environment, 'deadlineSeconds':90,
+            'runtimeSha256':file_sha256(PHP),
+            'runtimeFileHashes':runtime_hashes,
+            'harnessSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'sourceHashes':{name:hashlib.sha256((target/name).read_bytes()).hexdigest() for name in source_bytes},
+            'networkIsolation':False, 'serverBinding':'none requested; selected CGI fixtures use pipes and synthetic local files',
+            'availablePhysicalMiBBeforeStart':round(memory.ullAvailPhys/(1024*1024),2),
+            'jobCommittedMemoryLimitBytes':256*1024*1024, 'jobActiveProcessLimit':16,
+            'jobLimitsReadbackVerified':True,
+            'limitScope':'These are execution bounds on this owned process tree, not PHP configuration mitigations or proof of memory-safety coverage.',
+            'proofScope':'selected CGI session-upload behavior; fresh CGI processes, not persistent-worker or deployed-service proof'}
+        (target/'request.json').write_text(json.dumps(record,indent=2),encoding='utf-8')
+    except BaseException:
+        close(job)
+        raise
     pi = ProcessInfo(); assigned = False; begun = time.monotonic()
     try:
-        limits = ExtendedLimit(); limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x200 | 0x8
-        limits.JobMemoryLimit = 256 * 1024 * 1024
-        limits.BasicLimitInformation.ActiveProcessLimit = 16
-        checked(set_job(job,9,c.byref(limits),c.sizeof(limits)))
-        configured = ExtendedLimit(); checked(query_job(job,9,c.byref(configured),c.sizeof(configured),None))
-        if configured.JobMemoryLimit != 256*1024*1024 or configured.BasicLimitInformation.ActiveProcessLimit != 16 or configured.BasicLimitInformation.LimitFlags & 0x2208 != 0x2208:
-            raise RuntimeError('Owned job limits did not match the requested memory/process/cleanup settings')
-        record['jobLimitsReadbackVerified']=True
         with open(target/'stdout.txt','wb') as output, open(target/'stderr.txt','wb') as errors, open(os.devnull,'rb') as null:
             for file in (output,errors,null): os.set_handle_inheritable(msvcrt.get_osfhandle(file.fileno()),True)
             si = Startup(); si.cb = c.sizeof(si); si.dwFlags = 0x100
@@ -236,6 +292,7 @@ def main():
                 if accounting.ActiveProcesses == 0: break
                 time.sleep(0.05)
             record['activeProcessesAfterCleanup']=accounting.ActiveProcesses
+            limits = ExtendedLimit()
             checked(query_job(job,9,c.byref(limits),c.sizeof(limits),None))
             record['peakJobCommittedBytes']=limits.PeakJobMemoryUsed
     except Exception as error:
