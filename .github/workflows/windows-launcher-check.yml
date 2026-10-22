@@ -29,4 +29,6 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile lab/windows/run-cgi-regressions.py
+          if ($LASTEXITCODE -ne 0) { throw "Python compile failed with exit code $LASTEXITCODE" }
           python lab/windows/run-cgi-regressions.py --help
+          if ($LASTEXITCODE -ne 0) { throw "Python help check failed with exit code $LASTEXITCODE" }

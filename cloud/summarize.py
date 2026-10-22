@@ -19,6 +19,36 @@ SOURCE_MANIFEST = Path(__file__).resolve().parent.parent / 'lab' / 'windows' / '
 PHP_BINARY_PATHS = {'/src/sapi/cli/php', '/src/sapi/cgi/php-cgi'}
 HASH_LINE = re.compile(r'^([0-9a-f]{64})  (/[^\r\n]+)$')
 VERSION_LINE = re.compile(r'^PHP ([0-9]+\.[0-9]+\.[0-9]+) \((cli|cgi-fcgi)\)(?: .*)?$')
+TMPFS_EXPECTED = {
+    '/work': {'size': '128m', 'uid': '10001', 'gid': '10001', 'mode': '0700'},
+    '/tmp': {'size': '64m', 'mode': '1777'},
+}
+
+
+def tmpfs_options_verified(tmpfs: dict) -> bool:
+    """Accept the requested tmpfs options for this workflow, without opposites."""
+    if not isinstance(tmpfs, dict) or set(tmpfs) != set(TMPFS_EXPECTED):
+        return False
+    required_flags = {'rw', 'noexec', 'nosuid', 'nodev'}
+    for target, value in tmpfs.items():
+        if not isinstance(value, str):
+            return False
+        flags, parameters = set(), {}
+        for token in value.split(','):
+            if not token:
+                return False
+            if '=' in token:
+                key, setting = token.split('=', 1)
+                if not key or not setting or key in parameters:
+                    return False
+                parameters[key] = setting
+            else:
+                if token in flags:
+                    return False
+                flags.add(token)
+        if flags != required_flags or parameters != TMPFS_EXPECTED[target]:
+            return False
+    return True
 
 
 def runtime_headers_match(identity: bytes, version: str) -> bool:
@@ -125,11 +155,7 @@ def main():
     )
     security_options = inspect.get('securityOpt') or []
     tmpfs = inspect.get('tmpfs') or {}
-    tmpfs_flags_verified = (
-        set(tmpfs) == {'/work', '/tmp'}
-        and all({'rw', 'noexec', 'nosuid', 'nodev'}.issubset(set(options.split(',')))
-                for options in tmpfs.values())
-    )
+    tmpfs_flags_verified = tmpfs_options_verified(tmpfs)
     expected_security_options = {'no-new-privileges', 'no-new-privileges:true'}
     boundary_verified = (
         inspect.get('networkMode') == 'none'

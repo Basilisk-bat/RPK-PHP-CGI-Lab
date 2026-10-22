@@ -120,6 +120,24 @@ def main():
             summarize, root, 'tmpfs-exec', '8.5.12',
             {'tmpfs': {'/work': 'rw,exec,size=128m', '/tmp': 'rw,noexec,nosuid,nodev,size=64m'}})
         assert tmpfs_exec == 1 and not tmpfs_exec_result['boundaryVerified']
+        work_options = 'rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001,mode=0700'
+        tmp_options = 'rw,noexec,nosuid,nodev,size=64m,mode=1777'
+        for label, suffix in (
+            ('opposite-exec', ',exec'), ('opposite-suid', ',suid'),
+            ('opposite-dev', ',dev'), ('opposite-ro', ',ro'),
+            ('duplicate-rw', ',rw'), ('changed-size', ',size=256m'),
+            ('empty-option', ','), ('unknown-option', ',foo=bar'),
+        ):
+            code, result = summarize_case(
+                summarize, root, label, '8.5.12',
+                {'tmpfs': {'/work': work_options + suffix, '/tmp': tmp_options}})
+            assert code == 1 and not result['boundaryVerified'], label
+        for label, suffix in (('tmp-opposite-exec', ',exec'),
+                              ('tmp-extra-value', ',mode=0700')):
+            code, result = summarize_case(
+                summarize, root, label, '8.5.12',
+                {'tmpfs': {'/work': work_options, '/tmp': tmp_options + suffix}})
+            assert code == 1 and not result['boundaryVerified'], label
         assert timeout == 1 and not timeout_result['exitVerified']
         assert 'No verified comparison' in (root / 'timeout' / 'host' / 'report.html').read_text()
         assert reference == 0 and reference_result['failed'] == 3
